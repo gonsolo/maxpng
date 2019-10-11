@@ -1,7 +1,8 @@
+.swift-version
 .DS_Store
 /.build
 /Packages
 Package.resolved
 /*.xcodeproj
 /tests/*.png
-/tests/maxpng/unit/out/*.png
+/benchmarks/*.png.png

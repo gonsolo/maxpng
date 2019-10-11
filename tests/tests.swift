@@ -1,260 +1,166 @@
-#if os(macOS)
-import Darwin
-#elseif os(Linux)
-import Glibc
-#endif
+import PNG
 
-import MaxPNG
-
-fileprivate 
-let bold = "\u{001B}[1m", 
-    green = "\u{001B}[0;32m", 
-    green_bold = "\u{001B}[1;32m", 
-
-    light_green = "\u{001B}[92m", 
-    light_green_bold = "\u{001B}[1;92m", 
-
-    light_cyan = "\u{001B}[96m", 
-    light_cyan_bold = "\u{001B}[1;96m", 
-
-    red = "\u{001B}[0;31m", 
-    red_bold = "\u{001B}[1;31m", 
-
-    pink_bold = "\u{001B}[1m\u{001B}[38;5;204m", 
-
-    color_off = "\u{001B}[0m"
-
-fileprivate 
-let TERM_WIDTH:Int = 72
-
-// duplicate of the internal library function, copied so we can test with release config,
-// and not have it exposed as part of the public API
-func posix_path(_ path:String) -> String
+fileprivate
+extension Array where Element == UInt8
 {
-    guard let first_char:Character = path.characters.first
-    else
+    func load<T, U>(littleEndian:T.Type, as type:U.Type, at byte:Int) -> U
+        where T:FixedWidthInteger, U:BinaryInteger
     {
-        return path
+        return self[byte ..< byte + MemoryLayout<T>.size].load(littleEndian: T.self, as: U.self)
     }
-    var expanded_path:String = path
-    if first_char == "~"
+}
+fileprivate
+extension ArraySlice where Element == UInt8
+{
+    func load<T, U>(littleEndian:T.Type, as type:U.Type) -> U
+        where T:FixedWidthInteger, U:BinaryInteger
     {
-        if expanded_path.characters.count == 1 || expanded_path[expanded_path.index(expanded_path.startIndex, offsetBy: 1)] == "/"
+        return self.withUnsafeBufferPointer
         {
-            expanded_path = String(cString: getenv("HOME")) + String(expanded_path.characters.dropFirst())
+            (buffer:UnsafeBufferPointer<UInt8>) in
+
+            assert(buffer.count >= MemoryLayout<T>.size,
+                "attempt to load \(T.self) from slice of size \(buffer.count)")
+
+            var storage:T = .init()
+            let value:T   = withUnsafeMutablePointer(to: &storage)
+            {
+                $0.deinitialize(count: 1)
+
+                let source:UnsafeRawPointer     = .init(buffer.baseAddress!),
+                    raw:UnsafeMutableRawPointer = .init($0)
+
+                raw.copyMemory(from: source, byteCount: MemoryLayout<T>.size)
+
+                return raw.load(as: T.self)
+            }
+
+            return U(T(littleEndian: value))
         }
     }
-    return expanded_path
 }
 
-func normalize_and_compare(path_png:String, path_rgba:String, log:inout [String]) -> Bool
+func testEncode(_ name:String) -> String?
 {
-    guard let (deinterlaced, properties):([UInt8], PNGProperties) = normalize_deinterlace(path: path_png, log: &log)
-    else
-    {
-        return false
-    }
-    return test_against_rgba64(png_data: deinterlaced, properties: properties, path_rgba: path_rgba, log: &log)
-}
+    let pngPath:String  = "tests/unit/png/\(name).png",
+        rgbaPath:String = "tests/unit/rgba/\(name).png.rgba",
+        outPath:String  = "tests/unit/out/\(name).png"
 
-func normalize_deinterlace(path:String, log:inout [String]) -> ([UInt8], PNGProperties)?
-{
-    let (png_raw_data, properties):([UInt8], PNGProperties)
     do
     {
-        (png_raw_data, properties) = try png_decode(path: path, recognizing: [.IDAT, .tRNS])
+        guard let rectangular:PNG.Data.Rectangular = try .decompress(path: pngPath)
+        else
+        {
+            return "failed to open file '\(pngPath)'"
+        }
+
+        // compress image into png
+        try PNG.encode( rgba: rectangular.rgba(of: UInt16.self),
+                        size: rectangular.properties.size,
+                          as: rectangular.properties.format.code,
+                   chromaKey: rectangular.properties.chromaKey,
+                        path: outPath)
     }
     catch
     {
-        log.append(String(describing: error))
-        return nil
+        return "\(error)"
     }
 
-    if properties.interlaced
+    return testDecode(png: outPath, rgba: rgbaPath)
+}
+
+func testDecode(_ name:String) -> String?
+{
+    let pngPath:String  = "tests/unit/png/\(name).png",
+        rgbaPath:String = "tests/unit/rgba/\(name).png.rgba"
+    return testDecode(png: pngPath, rgba: rgbaPath)
+}
+
+func testDecode(png pngPath:String, rgba rgbaPath:String) -> String?
+{
+    do
     {
-        guard let deinterlaced:[UInt8] = properties.deinterlace(raw_data: png_raw_data)
+        guard let rectangular:PNG.Data.Rectangular = try .decompress(path: pngPath)
         else
         {
-            log.append("InterlaceDimensionError")
-            return nil
+            return "failed to open file '\(pngPath)'"
         }
-        return (deinterlaced, properties)
-    }
-    else
-    {
-        return (png_raw_data, properties)
-    }
-}
 
-func load_rgba_data<Pixel>(path:String, n_pixels:Int) -> [RGBA<Pixel>]
-{
-    guard let stream:UnsafeMutablePointer<FILE> = fopen(posix_path(path), "rb")
-    else
-    {
-        fatalError("Failed to read rgba file '\(posix_path(path))'")
-    }
-    defer { fclose(stream) }
+        let image:[PNG.RGBA<UInt16>] = rectangular.rgba(of: UInt16.self)
 
-    var pixel_data = [RGBA<Pixel>](repeating: RGBA(0, 0, 0, 0), count: n_pixels)
-    guard fread(&pixel_data, MemoryLayout<RGBA<Pixel>>.stride, n_pixels, stream) == n_pixels
-    else
-    {
-        fatalError("Failed to read rgba file '\(posix_path)'")
-    }
-
-    return pixel_data
-}
-
-func test_against_rgba64(png_data:[UInt8], properties:PNGProperties, path_rgba:String, log:inout [String]) -> Bool
-{
-    guard let rgba_data_png:[RGBA<UInt16>] = properties.rgba16(raw_data: png_data)
-    else
-    {
-        return false
-    }
-
-    let rgba_data_rgba:[RGBA<UInt16>] = load_rgba_data(path: path_rgba,
-                                                       n_pixels: properties.width * properties.height)
-
-    var pass:Bool = false,
-        mismatch_index:Int = 0
-
-    if rgba_data_png.count == rgba_data_rgba.count
-    {
-        pass = true
-        for i:Int in rgba_data_png.indices
+        guard let result:[PNG.RGBA<UInt16>]? =
+        (PNG.File.Source.open(path: rgbaPath)
         {
-            if rgba_data_png[i] != rgba_data_rgba[i]
-            {
-                mismatch_index = i
-                pass = false
-                break
-            }
-        }
-    }
+            let pixels:Int = rectangular.properties.size.x * rectangular.properties.size.y,
+                bytes:Int  = pixels * MemoryLayout<PNG.RGBA<UInt16>>.stride
 
-    if !pass
-    {
-        log.append("RGBA[\(rgba_data_rgba.count)](\(mismatch_index)): \(rgba_data_rgba[mismatch_index ..< min(mismatch_index + 8, rgba_data_rgba.count)])")
-        log.append("PNG [\(rgba_data_png.count )](\(mismatch_index)): \(rgba_data_png [mismatch_index ..< min(mismatch_index + 8, rgba_data_png.count )])")
-    }
-
-    return pass
-}
-
-func print_centered(_ str:String, color:String?, width:Int = TERM_WIDTH)
-{
-    print(String(repeating: " ", count: max(0, (width - str.characters.count)) >> 1) + (color ?? "") + str + color_off)
-}
-
-func print_progress(percent:Double, text:[(String, String?)], erase:Bool = false, width:Int = TERM_WIDTH)
-{
-    let bar_width:Int = width - 8
-    let percent_label:String = "\(Int(percent * 100))%"
-    let percent_padding:String = String(repeating: " ", count: 5 - percent_label.characters.count)
-
-    if erase
-    {
-        let erasers:String = String(repeating: "\u{001B}[1A\u{001B}[K", count: text.count + 1)
-        print(erasers, terminator: "")
-    }
-
-    for (str, color):(String, String?) in text
-    {
-        print_centered(str, color: color, width: width)
-    }
-
-    print("\(percent_padding)\(percent_label) \(light_green)[\(light_green_bold)", terminator: "")
-    let bar_segments:Int = Int(percent * Double(bar_width))
-    print(String(repeating: "=", count: bar_segments) + String(repeating: "-", count: bar_width - bar_segments), terminator: "")
-    print("\(color_off)\(light_green)]\(color_off)")
-    fflush(stdout)
-}
-
-typealias TestFunc = (String, inout [String]) -> Bool
-
-func run_tests(_ tests:[(String, [String], TestFunc)], verbose:Bool, only_run test_subset:Set<String>?) -> Int32
-{
-    typealias TestRecord = (index: Int, number:String, name:String)
-
-    let test_count:Int      = tests.map{ $0.1.count }.reduce(0, +)
-    var test_counter:String = "—— Testing: 0 of \(test_count) tests ——"
-    var fail_vector:[TestRecord]   = []
-    var pass_vector:[TestRecord]   = []
-    var log:[[String]]      = []
-    var i:Int               = 0
-    if !verbose
-    {
-        print_progress(percent: 0, text: [(test_counter, light_cyan_bold), ("", nil)], erase: false)
-    }
-    for (test_group, test_cases, test_func):(String, [String], TestFunc) in tests
-    {
-        for (j, test_case) in test_cases.enumerated()
-        {
-            if let test_subset = test_subset, !test_subset.contains(test_case)
-            {
-                continue
-            }
-            let record:TestRecord  = (index: i, number: "\(test_group):\(j)", name: test_case)
-            let output:(String, String?)
-            var log_entry:[String] = []
-            if test_func(record.name, &log_entry)
-            {
-                output = ("(\(record.number)) test '\(record.name)' passed", green_bold)
-                pass_vector.append(record)
-            }
+            guard let data:[UInt8] = $0.read(count: bytes)
             else
             {
-                output = ("(\(record.number)) test '\(record.name)' failed", red_bold)
-                fail_vector.append(record)
+                return nil
             }
 
-            log.append(log_entry)
-
-            if verbose
+            return (0 ..< pixels).map
             {
-                print((output.1 ?? "") + output.0 + color_off)
-                print(log[i].joined(separator: "\n"))
+                let r:UInt16 = data.load(littleEndian: UInt16.self, as: UInt16.self, at: $0 << 3),
+                    g:UInt16 = data.load(littleEndian: UInt16.self, as: UInt16.self, at: $0 << 3 | 2),
+                    b:UInt16 = data.load(littleEndian: UInt16.self, as: UInt16.self, at: $0 << 3 | 4),
+                    a:UInt16 = data.load(littleEndian: UInt16.self, as: UInt16.self, at: $0 << 3 | 6)
+
+                return .init(r, g, b, a)
             }
+        })
+        else
+        {
+            return "failed to open file '\(rgbaPath)'"
+        }
+
+        guard let reference:[PNG.RGBA<UInt16>] = result
+        else
+        {
+            return "failed to read file '\(rgbaPath)'"
+        }
+
+        for (i, pair):(Int, (PNG.RGBA<UInt16>, PNG.RGBA<UInt16>)) in
+            zip(image, reference).enumerated()
+        {
+            guard pair.0 == pair.1
             else
             {
-                test_counter = "—— Testing: \(i + 1) of \(test_count) tests ——"
-                print_progress(percent: Double(i)/Double(test_count), text: [(test_counter, light_cyan_bold), output], erase: true)
+                return "pixel \(i) has value \(pair.0) (expected \(pair.1))"
             }
-
-            i += 1
         }
+
+        return nil
     }
-
-    let summary:String = "\(pass_vector.count) passed, \(fail_vector.count) failed"
-    print_progress(percent: 1, text: [(test_counter, light_cyan_bold), (summary, light_cyan_bold)], erase: true && !verbose)
-    print()
-
-    if !verbose
+    catch
     {
-        for (index: i, number: number, name: name) in fail_vector
-        {
-            print(red_bold + "[\(i)] (\(number)) test '\(name)' failed" + color_off)
-            print(log[i].joined(separator: "\n"))
-            print()
-        }
+        return "\(error)"
     }
-
-    if fail_vector.count == 0 && pass_vector.count > 0
-    {
-        print_centered("<13", color: pink_bold)
-    }
-
-    return Int32(fail_vector.count)
 }
 
-let tests:[(String, [String], TestFunc)] =
-[
-    ("argb32", decode_test_cases, argb32_premultiplied_64_test),
-    ("rgba32", decode_test_cases, rgba32_64_test),
-    ("decode-unit", decode_test_cases, decode_test),
-    ("reencode-unit", decode_test_cases, test_reencode_unit_png),
-    ("decompose", ["decompose1"], test_decompose(test_name:log:)),
-    ("reencode", ["becky palatte", "taylor", "if red got the grammy", "wildest dreams adam7"], test_reencode_wild_png),
-    ("progressive", ["becky palatte", "taylor", "wildest dreams adam7", "if red got the grammy"], test_progressive)
-]
+func testPremultiplication<Sample>(for _:Sample.Type) -> String?
+    where Sample:FixedWidthInteger & UnsignedInteger
+{
+    for alpha:Sample in Sample.min ... Sample.max
+    {
+        for color:Sample in Sample.min ... Sample.max
+        {
+            let direct:PNG.RGBA<Sample>        = .init(color, alpha),
+                premultiplied:PNG.RGBA<Sample> = direct.premultiplied
+
+            let unquantized:Double = (Double(alpha) * Double(color) / Double(Sample.max)),
+                quantized:Sample   = .init(unquantized)
+
+            // the order is important here,, the short circuiting protects us from
+            // overflow when `quantized` == 255
+            guard premultiplied.r == quantized || premultiplied.r == quantized + 1
+            else
+            {
+                return "premultiplication of rgba\(Sample.bitWidth)(\(direct.r), \(direct.g), \(direct.b), \(direct.a)) returned (\(premultiplied.r), \(premultiplied.g), \(premultiplied.b), \(premultiplied.a)), expected (\(unquantized), \(unquantized), \(unquantized), \(alpha))"
+            }
+        }
+    }
+
+    return nil
+}

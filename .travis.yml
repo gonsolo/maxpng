@@ -1,20 +1,19 @@
+language: generic
 matrix:
   include:
   - os: osx
-    language: objective-c
-    osx_image: xcode9
-    script:
-      - swift build -c release 
-      - .build/release/tests
+    osx_image: xcode11
+    env:
+    - JOB="MacOS"
   - os: linux
-    language: generic
-    sudo: required
+    env:
+    - JOB="Linux"
     dist: trusty
-    env: 
-    - SWIFT_BRANCH=swift-4.0-release SWIFT_VERSION=swift-4.0-RELEASE
-    install:
-    - mkdir swift
-    - curl https://swift.org/builds/$SWIFT_BRANCH/ubuntu1404/$SWIFT_VERSION/$SWIFT_VERSION-ubuntu14.04.tar.gz -s | tar xz -C swift &> /dev/null
-    script:
-    - env PATH=$(pwd)/swift/$SWIFT_VERSION-ubuntu14.04/usr/bin:$PATH swift build -c release
-    - .build/release/tests
+script:
+- export SWIFT_VERSION=DEVELOPMENT-SNAPSHOT-2019-07-01-a
+- git clone --depth 1 https://github.com/kylef/swiftenv.git ~/.swiftenv
+- export SWIFTENV_ROOT="$HOME/.swiftenv"
+- export PATH="$SWIFTENV_ROOT/bin:$SWIFTENV_ROOT/shims:$PATH"
+- swiftenv install $SWIFT_VERSION
+- swiftenv rehash
+- swift run -c release tests

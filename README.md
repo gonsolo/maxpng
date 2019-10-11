@@ -1,146 +1,107 @@
-# maxpng
+# PNG
 
-[![Platforms](https://img.shields.io/badge/platform-linux-lightgrey.svg)](https://swift.org)
-[![Release tag](https://img.shields.io/github/release/kelvin13/maxpng.svg)](https://github.com/kelvin13/maxpng/releases)
-[![Build](https://travis-ci.org/kelvin13/maxpng.svg?branch=master)](https://travis-ci.org/kelvin13/maxpng)
-[![Issues](https://img.shields.io/github/issues/kelvin13/maxpng.svg)](https://github.com/kelvin13/maxpng/issues?state=open)
-[![Language](https://img.shields.io/badge/version-swift_4-ffa020.svg)](https://swift.org)
-[![License](https://img.shields.io/badge/license-GPL3-ff3079.svg)](https://github.com/kelvin13/maxpng/blob/master/COPYING)
-[![KK25](https://img.shields.io/badge/karlie-kloss-e030ff.svg)](https://www.google.com/search?q=karlie+kloss)
+[![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20osx-lightgrey.svg)](https://swift.org)
+[![Release tag](https://img.shields.io/github/release/kelvin13/png.svg)](https://github.com/kelvin13/png/releases)
+[![Build](https://travis-ci.org/kelvin13/png.svg?branch=master)](https://travis-ci.org/kelvin13/png)
+[![Issues](https://img.shields.io/github/issues/kelvin13/png.svg)](https://github.com/kelvin13/png/issues?state=open)
+[![Language](https://img.shields.io/badge/version-swift_5-ffa020.svg)](https://swift.org)
+[![License](https://img.shields.io/badge/license-GPL3-ff3079.svg)](https://github.com/kelvin13/png/blob/master/COPYING)
+[![KK26](https://img.shields.io/badge/Foundation-nil-e030ff.svg)](https://www.google.com/search?q=no+Foundation+import)
 
-<img align="right" src="max.png">
+<img align="right" src="logo.svg.png">
 
-An efficient, powerful, safe, and free PNG library, written in pure Swift. MaxPNG is
+A pure Swift PNG library. Enjoy fast PNG encoding and decoding with strong data types, strict validation, and a safe, expressive, and Swifty API.
 
-### *…modern*
+---
 
-MaxPNG is written in pure Swift, and it has a dependency on just a single C library — [zlib](http://www.zlib.net/). MaxPNG makes no reference to slow, legacy Objective C frameworks, in fact, it doesn’t even import Foundation. You get the benefit of a comfortable Swift API, without the overhead of aging Apple frameworks. MaxPNG is actively maintained, and the latest release snapshot builds on Swift 3.1.1. (Current `master` branch is written in Swift 4.)
+### getting started
 
-### *…easy to use*
-
-Decode or encode a PNG file in just one function call.
-
+Decode a PNG file to a type of your choice in just one function call.
 ````swift
-import MaxPNG
+import PNG
 
-let (png_raw_data, png_properties):([UInt8], PNGProperties) = try png_decode(path: "my_png_file.png")
+let (pixels, (x: width, y: height)) = try PNG.rgba(path: "example.png", of: UInt8.self)
+// pixels: [PNG.RGBA<UInt8>]
+// width:  Int
+// height: Int
 ````
 
+Use a component type of `UInt16` to capture the full color depth of a 16-bit PNG.
 ````swift
-let my_png_settings = PNGProperties(width: 3, height: 3, bit_depth: 8, color: .rgb, interlaced: false)
-let my_png_data:[UInt8] = [0  ,0  ,0  ,    255,255,255,    255,0  ,255,
-                           255,255,255,    0  ,0  ,0  ,    0  ,255,0  ,
-                           120,120,255,    150,120,255,    180,120,255]
-try png_encode(path: "my_output_png.png", raw_data: my_png_data, properties: my_png_settings)
+let (pixels, (x: width, y: height)) = try PNG.rgba(path: "example.png", of: UInt16.self)
+// pixels: [PNG.RGBA<UInt16>]
+// width:  Int
+// height: Int
 ````
-**MaxPNG’s entire public API is [documented](doc/2.0.1).**
 
-MaxPNG is batteries-included, providing several utility [functions](doc/pngproperties.md#instance-methods) that will deinterlace and normalize image data, turning any PNG file into an array of RGBA samples. In most cases, MaxPNG’s default output can be sent directly to a graphics API such as OpenGL. MaxPNG even includes functions to premultiply image alpha, and format data buffers that can be sent to the [Cairo graphics library](https://cairographics.org/).
-
-### *…powerful*
-
-MaxPNG includes a progressive API that reads and writes PNGs scanline by scanline, allowing you to process enormous PNG files. The progressive decoder and encoder objects also clean up after themselves, so you never have to worry about closing file streams or managing zlib internal state.
-
+Return only the components you need with the grayscale and grayscale-alpha APIs.
 ````swift
-let png = try PNGDecoder(path: "my_png_file.png")
-let out = try PNGEncoder(path: "my_resaved_png.png", properties: png.properties)
-
-while let scanline = try png.next_scanline()
-{
-    try out.add_scanline(scanline)
-}
-try out.finish()
+let (pixels, (x: width, y: height)) = try PNG.va(path: "example.png", of: UInt8.self)
+// pixels: [PNG.VA<UInt8>]
+// width:  Int
+// height: Int
 ````
-### *…safe*
+````swift
+let (pixels, (x: width, y: height)) = try PNG.v(path: "example.png", of: UInt8.self)
+// pixels: [UInt8]
+// width:  Int
+// height: Int
+````
 
-MaxPNG is written in pure Swift, and so it should behave like a Swift library. Its decoder is fully standards-compliant, passing all 161 official PNG [unit tests](http://www.schaik.com/pngsuite/pngsuite.html#basic), among others. It supports interlacing, indexed color, and even chroma key transparency. MaxPNG also throws [errors](doc/pngerrors.md) like a Swift library should, minimizing the chance that you’ll end up with a corrupt PNG.
+### documentation
 
-### *…free*
+* [**Tutorials**](doc/3.0.0/tutorials.md)
+* [**Example code**](examples)
+* [**API reference**](doc/3.0.0/api.swift)
 
-MaxPNG was built on Linux, and developed on github from the start. It has nothing to do with Apple, or any Apple framework, even Foundation. I created it because there was [no existing, maintained](#swift-png-parser) open source Swift PNG library.
+### features 
 
-## FAQ
+* Supports all standard PNG formats, including indexed and interlaced formats 
+* Supports common graphics API interchange formats such as ARGB32 
+* Supports ancillary chunks, including private ancillary chunks
+* Supports chroma key transparency
+* Multi-level APIs, including raw chunk-level APIs
+* Strong typing and expressive enumerations to catch invalid states at compile time
+* Fixed-layout currency types for efficient C interop
+* No Foundation imports and one system dependency, zlib
+* Tested on MacOS and Linux
+* Thorough API documentation
 
-### Usage
+### versions 
+
+| release | xcode | swift |
+| --- | --- | --- |
+| `master` | `11` | `trunk` |
+| [`3.0.0`](https://github.com/kelvin13/png/releases/tag/v3.0.0) | `10.1` | `4.2.1` |
+| [`2.0.1`](https://github.com/kelvin13/png/releases/tag/v2.0.1) | — | `3.1.1` |
+
+### faq
 
 > What’s the difference between bit depth and color type?
 
-Color type refers to the channels present in a PNG. A grayscale PNG has only one color channel, while an RGB PNG has three (red, green, and blue). An RGBA PNG has four — three color channels, plus one alpha channel. Similarly, a grayscale–alpha PNG has two — one grayscale “color” channel and one alpha channel. An indexed-color PNG (unsupported) has one encoded channel in the image data, but the colors the indices represent are always RGB triples. The vast majority of PNGs in the world are either of color type RGB or RGBA.
+Color type refers to the channels present in a PNG. A grayscale PNG has only one color channel, while an RGB PNG has three (red, green, and blue). An RGBA PNG has four — three color channels, plus one alpha channel. Similarly, a grayscale–alpha PNG has two — one grayscale “color” channel and one alpha channel. An indexed-color PNG has one encoded channel in the image data, but the colors the indices represent are always RGBA quadruples. The vast majority of PNGs in the world are either of color type RGB or RGBA.
 
 Bit depth goes one level lower; it represents the size of each *channel*. A PNG with a bit depth of `8` has `8` bits per channel. Hence, one pixel of an RGBA PNG is `4 * 8 = 32` bits long, or `4` bytes.
 
-> What does interlacing mean?
+> What is interlacing?
 
-[Interlacing](https://en.wikipedia.org/wiki/Interlacing_(bitmaps)) is a way of progressivly ordering the image data in a PNG so it can be displayed at lower resolution even when partially downloaded. Interlacing is common in images downloaded from social media such as Instagram or Twitter, but rare elsewhere. Interlacing hurts compression, and so it usually significantly increases the size of a PNG file, sometimes as much as thirty percent.
+[Interlacing](https://en.wikipedia.org/wiki/Interlacing_(bitmaps)) is a way of progressively ordering the image data in a PNG so it can be displayed at lower resolution even when partially downloaded. Interlacing is sometimes used in images on social media such as Instagram or Twitter, but rare elsewhere. Interlacing hurts compression, and so it usually significantly increases the size of a PNG file, sometimes as much as thirty percent.
 
-MaxPNG will read interlaced images as a series of subimage scanlines. To recover a rectangular pixel array, you should pass the interlaced scanlines into the provided `PNGProperties` member function `.deinterlace(raw_data:)` function.
+> Why does this package depend on `zlib`?
 
-> How do I deinterlace an interlaced PNG?
+ZLib is a standard compression/decompression library that is installed by default on MacOS and most Linux systems. Although it is written in C, it is wrapped by almost every major programming language including Java and Python. The only other Swift PNG decoder library in existence at the time of writing, [SwiftGL Image](https://github.com/SwiftGL/Image), actually implements its own, pure Swift, `INFLATE` algorithm. (Note that it doesn’t compile on Swift ≥3.1.)
 
-Use `PNGProperties`’s member function `.deinterlace(raw_data:)`.
+> Does this package work on MacOS?
 
-````swift
-PNGProperties › func deinterlace(raw_data:[UInt8]) -> [UInt8]?
-````
-The scanlines passed in the scanline array must be in [ADAM7 order](https://en.wikipedia.org/wiki/Adam7_algorithm), and their sizes must agree with the bit depth and color format parameters passed through the `PNGProperties` struct.
+Yes.
 
-### General
+> How do I access/encode custom PNG metadata chunks?
 
-> Why not use a C PNG decoder like [`libpng`](http://www.libpng.org/pub/png/libpng.html)?
+Use the ancillary chunk API on the `Data.Uncompressed` or `Data.Rectangular` types, which expose ancillary chunk types and data through the `ancillaries` instance property. See [this tutorial](doc/3.0.0/tutorials.md#apply-a-color-ramp-to-a-grayscale-image) for more details. Note that, except for `tRNS`, *PNG* does not parse ancillary chunks, it only provides their data as a `[UInt8]` buffer. Consult the [PNG specification](http://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html) to interpret the ancillary chunks.
 
-Cause it either a) doesn’t work in Swift, or b) it actually does work but the API is [so](https://bobobobo.wordpress.com/2009/03/02/how-to-use-libpng/) [bad](http://latentcontent.net/2007/12/05/libpng-worst-api-ever/) that I don’t know how to get it to work, which, if you think about it, is just as bad. Either way, `libpng` is written in C. MaxPNG is written in Swift. Yay!
+> Does this package do gamma correction?
 
-> Why does it depend on `zlib` then?
+No. Gamma is meant to be applied at the image *display* stage. *PNG* only gives you the base pixel values in the image (with indexed pixel dereferencing and chroma key substitution). Gamma is also easy to apply to raw color data but computationally expensive to remove. Some PNGs include gamma data in a chunk called `gAMA`, but most don’t, and viewers will just apply a `γ = 2.2` regardless.
 
-ZLib is a standard compression/decompression library that is installed by default on most Linux systems. Although it is written in C library, it is wrapped by almost every major programming language including Java and Python. The only other Swift PNG decoder library in existence at the time of writing, [SwiftGL Image](https://github.com/SwiftGL/Image), actually implements its own, pure Swift, `INFLATE` algorithm. (Be warned though, it doesn’t compile on Swift ≥3.1.)
-
-> Does MaxPNG work on Mac OSX?
-
-MaxPNG works great on macOS with the preinstalled zlib.
-
-> What is the progressive API good for?
-
-Some PNGs are so large that loading them into your RAM will make you very sad. These PNGs are not meant to be viewed, rather processed as data for other purposes. (Think satellite scan data.) Reading them line by line avoids this problem by letting you stream the picture in and out of your program while you do your thing (such as downsampling them to something small enough that you *can* view on your screen).
-
-> Why did it “skip” `nUGZ`??? That’s my favorite chunk!!!
-
-Right now, MaxPNG only recognizes the chunks `IHDR`, `IDAT`, `IEND`, `PLTE`, and `.tRNS`. The other ancillary chunks are currently unrecognized, but still validated for chunk ordering.
-
-> Wait, MaxPNG lets you skip `IDAT`??? Why would you ever want to do that?
-
-By default, MaxPNG will decode the image pixel data, but if you pass `PNGDecoder.init(path:recognizing:)` an empty array in its `recognizing:[PNGChunkType]` field, it will ignore the pixel data chunks. Sometimes you want to do this if, for example, you just want to get the dimensions of the PNG file. Decoding the pixel data we don’t care about would just be a waste of time.
-
-> Does MaxPNG do gamma correction?
-
-No. Gamma is meant to be applied at the image *display* stage. MaxPNG only gives you the raw, integer color data in the file. Gamma is also easy to apply to raw color data but computationally expensive to remove. Some PNGs include gamma data in a chunk called `gAMA`, but most don’t, and viewers will just apply a `γ = 2.2` regardless. MaxPNG doesn’t read `gAMA` right now.
-
-> Can I add extra chunks to my PNG output?
-
-At the moment, no. MaxPNG currently only writes the basic `IHDR`, `IDAT`, `IEND` chunks, and the `PLTE` and `tRNS` chunks if applicable.
-
-> I hate maxpng isnt there any other png encoder/decoder out there i stg
-
-It’s okay, I only wrote MaxPNG because I couldn’t find any good existing free Swift PNG library. Here’s a rundown of some of the alternatives I stumbled across from a simple search of `'swift png'` in the magical github search bar:
-
-> #### [Swift-PNG-Parser](https://github.com/dixielandtech/Swift-PNG-Parser)
-
-Not a library, just a wrapper around the Cocoa framework.
-
-> #### [SimplePNG](https://github.com/rfdickerson/SimplePNG)
-
-Not a library, just a wrapper around `libpng`. Also has no support for decoding PNG files.
-
-> #### [swift-png](https://github.com/llaimiaomiao/swift-png)
-
-This repository was empty. I did however enjoy the github youtube channel
-
-> #### [pinge](https://github.com/Vel0x/Pinge)
-
-Actually one of the most complete Swift PNG libraries I’ve seen. Has no support for encoding PNG files though, and I don’t believe it lets you read by scanline. Also depends on Apple Foundation.
-
-> #### [CompressPicture](https://github.com/chenmo230/CompressPicture)
-
-I have no idea what this repository does.
-
-## Building
-Build MaxPNG with the swift package manager, `swift build`. Make sure you have the `zlib` headers on your computer (`sudo apt-get install libz-dev`).
+### building
+Build *PNG* with the swift package manager, `swift build` (`-c release`). Make sure you have the `zlib` headers on your computer (`sudo apt-get install libz-dev`).
